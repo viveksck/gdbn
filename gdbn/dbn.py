@@ -74,7 +74,7 @@ def loadDBN(path, outputActFunct, realValuedVis = False, useReLU = False):
     fd.close()
     return DBN(weights, biases, genBiases, outputActFunct, realValuedVis, useReLU)
 
-def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU = False, uniforms = None):
+def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU = False, uniforms = None, max_norm = -1, noises = []):
     shapes = [(layerSizes[i-1],layerSizes[i]) for i in range(1, len(layerSizes))]
     assert(len(scales) == len(shapes) == len(fanOuts))
     if uniforms == None:
@@ -86,7 +86,7 @@ def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU
     initialWeights = [gnp.garray(initWeightMatrix(shapes[i], scales[i], fanOuts[i], uniforms[i])) \
                       for i in range(len(shapes))]
     
-    net = DBN(initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis, useReLU)
+    net = DBN(initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis, useReLU, max_norm, noises)
     return net
 
 def columnRMS(W):
@@ -99,9 +99,19 @@ def limitColumnRMS(W, rmsLim):
     """
     rmsScale = rmsLim/columnRMS(W)
     return W*(1 + (rmsScale < 1)*(rmsScale-1))
+
+def l2norm(v):
+    """Calculates the l2norm of a vector."""
+    #print "l2 norm is", num.sum(v*v) ** 0.5
+    return num.sum(v*v) ** 0.5
+
+def add_gaussian_noise(w, std_dev):
+    """ Adds gaussian noise with 0 mean. """
+    noise = num.random.normal(0,std_dev, w.shape)
+    return w + noise
     
 class DBN(object):
-    def __init__(self, initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis = False, useReLU = False):
+    def __init__(self, initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis = False, useReLU = False, max_norm=-1, noises = []):
         self.realValuedVis = realValuedVis
         self.learnRates = [0.05 for i in range(len(initialWeights))]
         self.momentum = 0.9
@@ -129,6 +139,8 @@ class DBN(object):
         #state variables modified in bprop
         self.WGrads = [gnp.zeros(self.weights[i].shape) for i in range(len(self.weights))]
         self.biasGrads = [gnp.zeros(self.biases[i].shape) for i in range(len(self.biases))]
+        self.max_norm = max_norm
+        self.noises = noises
     
     def weightsDict(self):
         d = {}
@@ -268,6 +280,15 @@ class DBN(object):
         for i in range(len(self.rmsLims)):
             if self.rmsLims[i] != None:
                 self.weights[i] = limitColumnRMS(self.weights[i], self.rmsLims[i])
+
+    def constrainMaxNorm(self):
+        if self.max_norm == -1:
+          return
+        for i in range(len(self.weights)):
+            wf = gnp.as_numpy_array(self.weights[i]).flatten()
+            if l2norm(wf) > self.max_norm:
+               wf = (wf/l2norm(wf)) * self.max_norm
+               self.weights[i] = gnp.garray(wf.reshape(self.weights[i].shape))
     
     def step(self, inputBatch, targetBatch, learnRates, momentum, L2Costs, useDropout = False):
         mbsz = inputBatch.shape[0]
@@ -279,10 +300,13 @@ class DBN(object):
         factor = 1-momentum if not self.nestCompare else 1.0
         self.scaleDerivs(momentum)
         for i, (WGrad, biasGrad) in enumerate(self.gradients(self.state, errSignals)):
+	    if len(self.noises) > 0 and self.noises[i] != 0.0:
+               WGrad = add_gaussian_noise(WGrad, self.noises[i]) 
             self.WGrads[i] += learnRates[i]*factor*(WGrad/mbsz - L2Costs[i]*self.weights[i])
             self.biasGrads[i] += (learnRates[i]*factor/mbsz)*biasGrad
         self.applyUpdates(self.weights, self.biases, self.weights, self.biases, self.WGrads, self.biasGrads)
         self.constrainWeights()
+        self.constrainMaxNorm()
         return error, outputActs
     
     def applyUpdates(self, destWeights, destBiases, curWeights, curBiases, WGrads, biasGrads):
