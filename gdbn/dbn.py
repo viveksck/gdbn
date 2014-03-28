@@ -300,8 +300,8 @@ class DBN(object):
         factor = 1-momentum if not self.nestCompare else 1.0
         self.scaleDerivs(momentum)
         for i, (WGrad, biasGrad) in enumerate(self.gradients(self.state, errSignals)):
-	    if len(self.noises) > 0 and self.noises[i] != 0.0:
-               WGrad = add_gaussian_noise(WGrad, self.noises[i]) 
+            if len(self.noises) > 0 and self.noises[i] != 0.0:
+              WGrad = add_gaussian_noise(WGrad, self.noises[i]) 
             self.WGrads[i] += learnRates[i]*factor*(WGrad/mbsz - L2Costs[i]*self.weights[i])
             self.biasGrads[i] += (learnRates[i]*factor/mbsz)*biasGrad
         self.applyUpdates(self.weights, self.biases, self.weights, self.biases, self.WGrads, self.biasGrads)
