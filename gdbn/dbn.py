@@ -211,7 +211,12 @@ class DBN(object):
             prog = Progress(mbPerEpoch) if progressBar else DummyProgBar()
             for i in range(mbPerEpoch):
                 inpMB, targMB = minibatchStream.next()
-                err, outMB = step(inpMB, targMB, self.learnRates, self.momentum, self.L2Costs, useDropout)
+                usemaxNorm = False
+                usenoises = False
+                if ep > 6:
+                  usemaxNorm = True
+                  usenoises = True
+                err, outMB = step(inpMB, targMB, self.learnRates, self.momentum, self.L2Costs, useDropout, usemaxNorm, usenoises)
                 sumErr += err
                 if loss != None:
                     sumLoss += loss(targMB, outMB)
@@ -290,7 +295,7 @@ class DBN(object):
                wf = (wf/l2norm(wf)) * self.max_norm
                self.weights[i] = gnp.garray(wf.reshape(self.weights[i].shape))
     
-    def step(self, inputBatch, targetBatch, learnRates, momentum, L2Costs, useDropout = False):
+    def step(self, inputBatch, targetBatch, learnRates, momentum, L2Costs, useDropout = False, usemaxNorm = False, usenoises = False):
         mbsz = inputBatch.shape[0]
         inputBatch = inputBatch if isinstance(inputBatch, gnp.garray) else gnp.garray(inputBatch)
         targetBatch = targetBatch if isinstance(targetBatch, gnp.garray) else gnp.garray(targetBatch)
@@ -300,13 +305,14 @@ class DBN(object):
         factor = 1-momentum if not self.nestCompare else 1.0
         self.scaleDerivs(momentum)
         for i, (WGrad, biasGrad) in enumerate(self.gradients(self.state, errSignals)):
-            if len(self.noises) > 0 and self.noises[i] != 0.0:
+            if usenoises and len(self.noises) > 0 and self.noises[i] != 0.0:
               WGrad = add_gaussian_noise(WGrad, self.noises[i]) 
             self.WGrads[i] += learnRates[i]*factor*(WGrad/mbsz - L2Costs[i]*self.weights[i])
             self.biasGrads[i] += (learnRates[i]*factor/mbsz)*biasGrad
         self.applyUpdates(self.weights, self.biases, self.weights, self.biases, self.WGrads, self.biasGrads)
         self.constrainWeights()
-        self.constrainMaxNorm()
+        if usemaxNorm:
+          self.constrainMaxNorm()
         return error, outputActs
     
     def applyUpdates(self, destWeights, destBiases, curWeights, curBiases, WGrads, biasGrads):
