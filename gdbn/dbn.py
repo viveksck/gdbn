@@ -307,6 +307,7 @@ class DBN(object):
         for i, (WGrad, biasGrad) in enumerate(self.gradients(self.state, errSignals)):
             if usenoises and len(self.noises) > 0 and self.noises[i] != 0.0:
               WGrad = add_gaussian_noise(WGrad, self.noises[i]) 
+              biasGrad = add_gaussian_noise(biasGrad, self.noises[i]) 
             self.WGrads[i] += learnRates[i]*factor*(WGrad/mbsz - L2Costs[i]*self.weights[i])
             self.biasGrads[i] += (learnRates[i]*factor/mbsz)*biasGrad
         self.applyUpdates(self.weights, self.biases, self.weights, self.biases, self.WGrads, self.biasGrads)
