@@ -74,7 +74,7 @@ def loadDBN(path, outputActFunct, realValuedVis = False, useReLU = False):
     fd.close()
     return DBN(weights, biases, genBiases, outputActFunct, realValuedVis, useReLU)
 
-def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU = False, uniforms = None, max_norm = -1, noises = []):
+def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU = False, uniforms = None, max_norm = -1, noises = [], dropout_adv = 0.0):
     shapes = [(layerSizes[i-1],layerSizes[i]) for i in range(1, len(layerSizes))]
     assert(len(scales) == len(shapes) == len(fanOuts))
     if uniforms == None:
@@ -86,7 +86,7 @@ def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU
     initialWeights = [gnp.garray(initWeightMatrix(shapes[i], scales[i], fanOuts[i], uniforms[i])) \
                       for i in range(len(shapes))]
     
-    net = DBN(initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis, useReLU, max_norm, noises)
+    net = DBN(initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis, useReLU, max_norm, noises, dropout_adv)
     return net
 
 def columnRMS(W):
@@ -111,7 +111,7 @@ def add_gaussian_noise(w, std_dev):
     return w + noise
     
 class DBN(object):
-    def __init__(self, initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis = False, useReLU = False, max_norm=-1, noises = []):
+    def __init__(self, initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis = False, useReLU = False, max_norm=-1, noises = [], dropout_adv = 0.0):
         self.realValuedVis = realValuedVis
         self.learnRates = [0.05 for i in range(len(initialWeights))]
         self.momentum = 0.9
@@ -141,6 +141,8 @@ class DBN(object):
         self.biasGrads = [gnp.zeros(self.biases[i].shape) for i in range(len(self.biases))]
         self.max_norm = max_norm
         self.noises = noises
+        self.dropout_adv = dropout_adv
+        print "Dropout Adv", self.dropout_adv
     
     def weightsDict(self):
         d = {}
@@ -398,11 +400,21 @@ class DBN(object):
         if weightsToStopBefore == None:
             weightsToStopBefore = len(self.weights)
         #self.state holds everything before the output nonlinearity, including the net input to the output units
-        self.state = [inputBatch * (gnp.rand(*inputBatch.shape) > self.dropouts[0])]
+        if self.dropout_adv != 0.0:
+          probs = gnp.rand(*inputBatch.shape) < 0.75
+          sample = 2.0 * probs - 1.0
+        else:
+          sample = (gnp.rand(*inputBatch.shape) > self.dropouts[0])
+        self.state = [inputBatch * sample]
         for i in range(min(len(self.weights) - 1, weightsToStopBefore)):
             dropoutMultiplier = 1.0/(1.0-self.dropouts[i])
             curActs = self.hidActFuncts[i].activation(gnp.dot(dropoutMultiplier*self.state[-1], self.weights[i]) + self.biases[i])
-            self.state.append(curActs * (gnp.rand(*curActs.shape) > self.dropouts[i+1]) )
+            if self.dropout_adv != 0.0:
+              probs = gnp.rand(*curActs.shape) < 0.75
+              sample = 2.0 * probs - 1.0
+            else:
+              sample = (gnp.rand(*curActs.shape) > self.dropouts[i+1])
+            self.state.append(curActs * sample)
         if weightsToStopBefore >= len(self.weights):
             dropoutMultiplier = 1.0/(1.0-self.dropouts[-1])
             self.state.append(gnp.dot(dropoutMultiplier*self.state[-1], self.weights[-1]) + self.biases[-1])
