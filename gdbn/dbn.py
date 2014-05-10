@@ -142,7 +142,7 @@ class DBN(object):
         self.max_norm = max_norm
         self.noises = noises
         self.dropout_adv = dropout_adv
-        print "Dropout Adv", self.dropout_adv
+        #print "Dropout Adv", self.dropout_adv
     
     def weightsDict(self):
         d = {}
@@ -323,7 +323,7 @@ class DBN(object):
             destWeights[i] = curWeights[i] + WGrads[i]
             destBiases[i] = curBiases[i] + biasGrads[i]
     
-    def stepNesterov(self, inputBatch, targetBatch, learnRates, momentum, L2Costs, useDropout = False):
+    def stepNesterov(self, inputBatch, targetBatch, learnRates, momentum, L2Costs, useDropout = False, usemaxNorm=False, useNoises=False):
         mbsz = inputBatch.shape[0]
         inputBatch = inputBatch if isinstance(inputBatch, gnp.garray) else gnp.garray(inputBatch)
         targetBatch = targetBatch if isinstance(targetBatch, gnp.garray) else gnp.garray(targetBatch)
