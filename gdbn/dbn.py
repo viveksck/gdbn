@@ -400,20 +400,12 @@ class DBN(object):
         if weightsToStopBefore == None:
             weightsToStopBefore = len(self.weights)
         #self.state holds everything before the output nonlinearity, including the net input to the output units
-        if self.dropout_adv != 0.0:
-          probs = gnp.rand(*inputBatch.shape) < 0.75
-          sample = 2.0 * probs - 1.0
-        else:
-          sample = (gnp.rand(*inputBatch.shape) > self.dropouts[0])
+        sample = (gnp.rand(*inputBatch.shape) > self.dropouts[0])
         self.state = [inputBatch * sample]
         for i in range(min(len(self.weights) - 1, weightsToStopBefore)):
             dropoutMultiplier = 1.0/(1.0-self.dropouts[i])
             curActs = self.hidActFuncts[i].activation(gnp.dot(dropoutMultiplier*self.state[-1], self.weights[i]) + self.biases[i])
-            if self.dropout_adv != 0.0:
-              probs = gnp.rand(*curActs.shape) < 0.75
-              sample = 2.0 * probs - 1.0
-            else:
-              sample = (gnp.rand(*curActs.shape) > self.dropouts[i+1])
+            sample = (gnp.rand(*curActs.shape) > self.dropouts[i+1])
             self.state.append(curActs * sample)
         if weightsToStopBefore >= len(self.weights):
             dropoutMultiplier = 1.0/(1.0-self.dropouts[-1])
