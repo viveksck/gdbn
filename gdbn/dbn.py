@@ -102,7 +102,6 @@ def limitColumnRMS(W, rmsLim):
 
 def l2norm(v):
     """Calculates the l2norm of a vector."""
-    #print "l2 norm is", num.sum(v*v) ** 0.5
     return num.sum(v*v) ** 0.5
 
 def add_gaussian_noise(w, std_dev):
@@ -213,6 +212,9 @@ class DBN(object):
                 inpMB, targMB = minibatchStream.next()
                 usemaxNorm = False
                 usenoises = False
+                # As Hinton suggests, discriminative fine tuning gets us into the right convex regime (after pretraining)
+                # we start the noisy gradient descent etc after first 5 epochs the weights are ever so slightly perturbed 
+                # and are hopefully in a convex regime
                 if ep > 6:
                   usemaxNorm = True
                   usenoises = True
@@ -306,6 +308,7 @@ class DBN(object):
         self.scaleDerivs(momentum)
         for i, (WGrad, biasGrad) in enumerate(self.gradients(self.state, errSignals)):
             if usenoises and len(self.noises) > 0 and self.noises[i] != 0.0:
+              # Add Gaussian noise to gradients of weights and biases.
               WGrad = add_gaussian_noise(WGrad, self.noises[i]) 
               biasGrad = add_gaussian_noise(biasGrad, self.noises[i]) 
             self.WGrads[i] += learnRates[i]*factor*(WGrad/mbsz - L2Costs[i]*self.weights[i])
