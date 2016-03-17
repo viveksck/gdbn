@@ -74,7 +74,7 @@ def loadDBN(path, outputActFunct, realValuedVis = False, useReLU = False):
     fd.close()
     return DBN(weights, biases, genBiases, outputActFunct, realValuedVis, useReLU)
 
-def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU = False, uniforms = None, max_norm = -1, noises = []):
+def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU = False, uniforms = None, max_norm = -1, noises = [], enable_noise_epoch=0):
     shapes = [(layerSizes[i-1],layerSizes[i]) for i in range(1, len(layerSizes))]
     assert(len(scales) == len(shapes) == len(fanOuts))
     if uniforms == None:
@@ -86,7 +86,7 @@ def buildDBN(layerSizes, scales, fanOuts, outputActFunct, realValuedVis, useReLU
     initialWeights = [gnp.garray(initWeightMatrix(shapes[i], scales[i], fanOuts[i], uniforms[i])) \
                       for i in range(len(shapes))]
     
-    net = DBN(initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis, useReLU, max_norm, noises)
+    net = DBN(initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis, useReLU, max_norm, noises, enable_noise_epoch=enable_noise_epoch)
     return net
 
 def columnRMS(W):
@@ -111,7 +111,7 @@ def add_gaussian_noise(w, std_dev):
     return w + noise
     
 class DBN(object):
-    def __init__(self, initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis = False, useReLU = False, max_norm=-1, noises = []):
+    def __init__(self, initialWeights, initialBiases, initialGenBiases, outputActFunct, realValuedVis = False, useReLU = False, max_norm=-1, noises = [], enable_noise_epoch = 0):
         self.realValuedVis = realValuedVis
         self.learnRates = [0.05 for i in range(len(initialWeights))]
         self.momentum = 0.9
@@ -141,6 +141,7 @@ class DBN(object):
         self.biasGrads = [gnp.zeros(self.biases[i].shape) for i in range(len(self.biases))]
         self.max_norm = max_norm
         self.noises = noises
+        self.enable_noise_epoch = enable_noise_epoch 
     
     def weightsDict(self):
         d = {}
@@ -213,7 +214,7 @@ class DBN(object):
                 inpMB, targMB = minibatchStream.next()
                 usemaxNorm = False
                 usenoises = False
-                if ep > 6:
+                if ep > self.enable_noise_epoch:
                   usemaxNorm = True
                   usenoises = True
                 err, outMB = step(inpMB, targMB, self.learnRates, self.momentum, self.L2Costs, useDropout, usemaxNorm, usenoises)
